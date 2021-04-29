@@ -2,20 +2,75 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, to_json, col, unbase64, base64, split, expr
 from pyspark.sql.types import StructField, StructType, StringType, BooleanType, ArrayType, DateType
 
-# TO-DO: create a StructType for the Kafka redis-server topic which has all changes made to Redis - before Spark 3.0.0, schema inference is not automatic
+# TO-DOne: create a StructType for the Kafka redis-server topic which has all changes made to Redis - before Spark 3.0.0, schema inference is not automatic
 
-# TO-DO: create a StructType for the Customer JSON that comes from Redis- before Spark 3.0.0, schema inference is not automatic
+redisMessageSchema = StructType (
+    [
+        StructField("key", StringType()),
+        StructField("ExistType", StringType()),
+        StructField("ch", BolleanType()),
+        StructField("incr", BolleanType()),
+        StructField("zSetEntries", ArrayType( \
+                                            StructType([
+                                                 StructField("element", StringType()),
+                                                 StructField("score", StringType()),
+                                            ])
+                                   )
+        ),
+    ]
+)
+
+# TO-DOne: create a StructType for the Customer JSON that comes from Redis- before Spark 3.0.0, schema inference is not automatic
+
+customerJSONSchema = StructType ([
+    StrutctField("customerName",StringType()),
+    StrutctField("email",StringType()),
+    StrutctField("phone",StringType()),
+    StrutctField("birthDay",StringType())
+]
+)
 
 # TO-DO: create a StructType for the Kafka stedi-events topic which has the Customer Risk JSON that comes from Redis- before Spark 3.0.0, schema inference is not automatic
 
-#TO-DO: create a spark application object
+customerJSONSchema = StructType ([
+    StrutctField("customer",StringType()),
+    StrutctField("score",IntegerType()),
+    StrutctField("riskDate",IntegerType())
+]
+)
 
-#TO-DO: set the spark log level to WARN
+#TO-DOne: create a spark application object
+
+spark = SparkSession.builder.appName("falling-risk").getOrCreate()
+
+#TO-DOne: set the spark log level to WARN
+
+spark.sparkContext.setLogLevel('WARN')
 
 # TO-DO: using the spark application object, read a streaming dataframe from the Kafka topic redis-server as the source
 # Be sure to specify the option that reads all the events from the topic including those that were published before you started the spark stream
 
+redisServerRawStreamingDF = spark \
+    .readStream\
+    .format("kafka")\
+    .option("kafka.bootstrap.servers", "localhost:9092")\
+    .options("subscribe", "redis-server")
+    .options("startingOffsets", "earliest")\
+    .load()
+
 # TO-DO: cast the value column in the streaming dataframe as a STRING 
+
+RedisServerStreamingDF = redisServerRawStreamingDF.selectExpr("cast(key as String) key", "cast(value as string) value")
+
+
+RedisServerStreamingDF.withColumn("value",from_json("value", redisMessageSchema))\
+    .select("value.*")\
+    .createOrReplaceTempView("RedisData")
+
+zSetEntriesEncodedStreamingDF = spark.sql("select key, zSetEntries[0].element as redisEvent from RedisData")
+
+zSetDecodedEntriesStreamingDF1 = zSetEntriesEncodedStreamingDF.withColumn("redisEvent", unbase64(zSetEntriesEncodedStreamingDF.redisEvent).cast("string"))
+
 
 # TO-DO:; parse the single column "value" with a json object in it, like this:
 # +------------+
